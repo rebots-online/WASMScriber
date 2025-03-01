@@ -1,123 +1,90 @@
-# Voice Notes WASM - Development Roadmap
+# WASMScriber Development Roadmap
 
-This document outlines the development roadmap for the Voice Notes WASM application, covering both Phase I (current implementation) and a high-level view of Phase II (future enhancements).
+## Phase 1: Foundation (Current)
+- [X] Project initialization
+- [X] Repository setup
+- [X] Basic documentation
+- [X] Architecture design
+- [ ] WASM module compilation
+- [ ] Worker implementation
 
-## Phase I: Voice Notes with Whisper WASM & Local Storage
+## Phase 2: Core Functionality
+- [ ] Audio recording component
+  - [ ] MediaRecorder implementation
+  - [ ] Buffer management
+  - [ ] Visualization
+- [ ] WASM integration
+  - [ ] Module loading
+  - [ ] Memory management
+  - [ ] Error handling
+- [ ] Worker thread management
+  - [ ] Worker pool
+  - [ ] Message handling
+  - [ ] Resource cleanup
 
-**Timeline: 2 weeks**
+## Phase 3: User Interface
+- [ ] Recording controls
+  - [ ] Start/Stop functionality
+  - [ ] Progress indication
+  - [ ] Error feedback
+- [ ] Transcription display
+  - [ ] Real-time updates
+  - [ ] Text formatting
+  - [ ] Copy/Export options
+- [ ] Settings panel
+  - [ ] Model selection
+  - [ ] Language options
+  - [ ] Performance settings
 
-### Week 1: Core Infrastructure & Recording Functionality
+## Phase 4: Performance Optimization
+- [ ] Memory usage optimization
+  - [ ] Buffer pooling
+  - [ ] Garbage collection
+- [ ] Processing efficiency
+  - [ ] Chunk size optimization
+  - [ ] Worker distribution
+  - [ ] Cache management
+- [ ] Load time improvement
+  - [ ] Module preloading
+  - [ ] Progressive enhancement
+  - [ ] Resource prioritization
 
-#### Days 1-2: Project Setup & Initial Components
-- Set up Next.js project structure
-- Install required dependencies
-- Create basic UI layout
-- Implement initial routing
+## Phase 5: Enhanced Features
+- [ ] Multiple language support
+- [ ] Speaker diarization
+- [ ] Punctuation inference
+- [ ] Export formats
+  - [ ] Plain text
+  - [ ] SRT/VTT
+  - [ ] Word-level timing
 
-#### Days 3-4: Whisper WASM Integration
-- Integrate Whisper WASM library
-- Implement WebGPU detection and fallback mechanism
-- Create WhisperContext to replace DeepgramContext
-- Set up audio recording and streaming to Whisper
+## Phase 6: Quality Assurance
+- [ ] Unit testing
+  - [ ] Worker functionality
+  - [ ] UI components
+  - [ ] Memory management
+- [ ] Integration testing
+  - [ ] End-to-end flows
+  - [ ] Performance benchmarks
+- [ ] Browser compatibility
+  - [ ] Chrome/Firefox/Safari
+  - [ ] Mobile support
 
-#### Days 5-7: Transcription & Editor
-- Implement real-time transcription display
-- Integrate wscribe-editor for word-level editing
-- Create animation for recording state
-- Build recording controls UI with proper state management
+## Phase 7: Documentation & Release
+- [ ] User documentation
+- [ ] API documentation
+- [ ] Deployment guide
+- [ ] Performance guide
+- [ ] Security audit
 
-### Week 2: Storage, Export & Refinement
+## Future Considerations
+- Voice activity detection
+- Custom model support
+- Real-time translation
+- Cloud backup integration
+- Offline functionality improvements
 
-#### Days 8-10: Dexie.js Integration & Note Management
-- Set up IndexedDB schema with Dexie.js
-- Implement CRUD operations for notes
-- Create notes list view
-- Build note detail view with editing capabilities
+---
+Copyright (C) 2025 Robin L. M. Cheung, MBA
 
-#### Days 11-12: Export Functionality
-- Implement export to various formats (JSON, Text, HTML, Markdown)
-- Create export UI
-- Add file download capabilities
-
-#### Days 13-14: Testing & Refinement
-- Cross-browser testing
-- Performance optimization
-- UI/UX refinements
-- Documentation updates
-
-## Phase II: Podcaster/YouTuber TTS with Voice Cloning
-
-**Timeline: Future Development (4-8 weeks)**
-
-### Key Components
-
-1. **Voice Profile Creation**
-   - Voice sample collection interface
-   - Voice model training integration
-   - Voice profile management
-
-2. **Enhanced Editor**
-   - Timeline-based editing
-   - Multi-track support
-   - Sound effect integration
-   - Background music capabilities
-
-3. **Export Enhancements**
-   - Direct podcast platform integration
-   - YouTube upload capabilities
-   - Custom audio format options
-   - Batch processing
-
-4. **Advanced TTS Features**
-   - Emotion and tone control
-   - Pronunciation customization
-   - Voice style transfer
-   - Multiple voice character support
-
-### Technical Prerequisites for Phase II
-
-- WebAssembly voice cloning model integration
-- Enhanced audio processing pipeline
-- Multi-track audio editing in browser
-- Cloud synchronization options (optional)
-
-## Dependencies
-
-### Phase I Dependencies
-- Next.js and React
-- TypeScript
-- Tailwind CSS
-- Whisper WASM
-- wscribe-editor
-- Dexie.js
-- Web Audio API
-
-### Additional Phase II Dependencies
-- Voice cloning model (TBD)
-- Advanced audio processing libraries
-- Media export APIs
-- Potentially server components for heavier processing tasks
-
-## Potential Challenges & Mitigation Strategies
-
-### Phase I Challenges
-
-1. **Whisper WASM Performance**
-   - *Mitigation*: Implement progressive loading, WebGPU acceleration, and optimized model sizes
-
-2. **Browser Compatibility**
-   - *Mitigation*: Feature detection, graceful degradation, and clear user messaging
-
-3. **Storage Limitations**
-   - *Mitigation*: Implement data pruning strategies and export functionality for backup
-
-### Phase II Challenges
-
-1. **Voice Cloning Ethics & Quality**
-   - *Mitigation*: Clear consent flows, watermarking, ethical usage guidelines
-
-2. **Processing Requirements**
-   - *Mitigation*: Optimize for WebGPU, consider optional cloud processing for heavy tasks
-
-3. **Integration Complexity**
-   - *Mitigation*: Modular architecture to allow incremental development and testing
+Last Updated: 2025-03-01

@@ -1,127 +1,73 @@
-# Voice Notes WASM - Application Architecture
+# WASMScriber Technical Architecture
 
 ## Overview
+WASMScriber is a browser-based speech transcription application that leverages WebAssembly for efficient, client-side audio processing. The application uses the Whisper model compiled to WebAssembly for local speech-to-text conversion without server dependencies.
 
-Voice Notes WASM is a Next.js application that allows users to record voice notes and have them transcribed in real-time using Whisper WASM, a WebAssembly implementation of OpenAI's Whisper model. The app stores notes locally using IndexedDB/Dexie.js and provides export functionality in various formats.
+## Core Components
 
-## Key Technologies
+### 1. WebAssembly Module (Whisper)
+- Location: `/public/whisper.js`, `/public/whisper.wasm`
+- Purpose: Provides speech-to-text capabilities
+- Implementation: Compiled from whisper.cpp using Emscripten
+- Features:
+  - Lightweight model (tiny.en)
+  - Real-time transcription support
+  - Memory-efficient processing
 
-- **Next.js & React**: Frontend framework
-- **TypeScript**: Type-safe JavaScript
-- **Tailwind CSS**: Styling
-- **Whisper WASM**: Local speech-to-text processing
-- **Dexie.js**: IndexedDB wrapper for local data storage
-- **wscribe-editor**: Word-level accurate transcript editor
+### 2. Web Worker Implementation
+- Location: `/src/lib/workers/whisper.worker.ts`
+- Purpose: Non-blocking audio processing
+- Features:
+  - Async message handling
+  - Stream processing support
+  - Memory management
 
-## System Architecture
+### 3. React Components
+- WhisperVoiceRecorder (`/src/components/WhisperVoiceRecorder.tsx`)
+  - Audio recording interface
+  - Real-time visualization
+  - Transcription controls
 
-### Components
+### 4. Context Management
+- WhisperContext (`/src/lib/contexts/WhisperContext.tsx`)
+  - WASM module initialization
+  - Worker pool management
+  - State synchronization
 
-1. **Core Framework**
-   - Next.js App Router structure
-   - React components
-
-2. **Data Layer**
-   - IndexedDB via Dexie.js
-   - Data models (Note, User preferences)
-   - Export functionality (JSON, Text, HTML, Markdown)
-
-3. **Voice Processing**
-   - Whisper WASM integration
-   - Audio recording and streaming
-   - Real-time transcription
-
-4. **User Interface**
-   - Recording controls
-   - Transcription editor (wscribe-editor)
-   - Notes list and management
-   - Export interface
-
-## Component Details
-
-### WhisperContext (replacing DeepgramContext)
-
-A React context provider that handles:
-- Loading Whisper WASM model
-- Recording audio from the microphone
-- Processing audio through Whisper
-- Streaming real-time transcription results
-- WebGPU detection and fallbacks
-
-### Database Service (replacing Firebase)
-
-- Dexie.js implementation for IndexedDB
-- Schema definitions
-- CRUD operations for notes
-- Backup and restore functionality
-
-### Editor Integration
-
-- Integration with wscribe-editor
-- Word-level editing capability
-- Styling and customization
-
-### Recording Component
-
-- Microphone permission handling
-- Recording state management
-- Visualization of audio input
-- Start/stop controls
-
-### Notes Management
-
-- List of saved notes with timestamps
-- Filtering and searching
-- Delete and edit operations
-
-### Export Service
-
-- Convert notes to different formats
-- Download functionality
-- Share options
+### 5. Type System
+- Location: `/src/lib/types/whisper.ts`
+- Defines:
+  - Worker message types
+  - Transcription interfaces
+  - Configuration types
 
 ## Data Flow
+```mermaid
+graph TD
+    A[Audio Input] --> B[VoiceRecorder Component]
+    B --> C[Web Worker]
+    C --> D[WASM Module]
+    D --> E[Transcription Result]
+    E --> F[UI Update]
+```
 
-1. **Recording Flow**
-   - User initiates recording
-   - Audio is captured and streamed to Whisper WASM
-   - Real-time transcription displayed in editor
-   - On stop, transcription is finalized and saved
+## Security Considerations
+- Client-side processing
+- No audio data transmission
+- Secure model loading
+- Memory cleanup
 
-2. **Storage Flow**
-   - Notes auto-saved to IndexedDB
-   - Notes retrieved on app start
-   - Changes synchronized with local storage
+## Build Process
+- WASM compilation via Emscripten
+- Model optimization
+- Asset bundling
+- Worker bundling
 
-3. **Export Flow**
-   - User selects note(s) to export
-   - User selects format
-   - System generates formatted output
-   - User downloads or shares the result
+## Performance Optimizations
+- Worker-based processing
+- Streaming transcription
+- Memory management
+- Caching strategies
 
-## Technical Considerations
-
-### Whisper WASM Integration
-
-- Model loading and initialization
-- WebGPU acceleration where available
-- Fallback to WebAssembly when WebGPU isn't available
-- Memory management for efficient processing
-
-### IndexedDB/Dexie.js Implementation
-
-- Schema versioning for future updates
-- Efficient querying and indexing
-- Error handling and recovery
-
-### Performance Optimization
-
-- Lazy loading of components and models
-- Efficient memory usage during transcription
-- UI responsiveness during processing
-
-### Browser Compatibility
-
-- Feature detection for required APIs
-- Fallbacks for unsupported features
-- Responsive design for different devices
+---
+Copyright (C) 2025 Robin L. M. Cheung, MBA

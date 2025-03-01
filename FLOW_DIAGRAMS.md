@@ -1,171 +1,105 @@
-# Voice Notes WASM - Flow Diagrams
+# WASMScriber Flow Diagrams
 
-## Application Data Flow
+## System Architecture
+```mermaid
+graph TD
+    subgraph Browser
+        A[Audio Input] --> B[MediaRecorder API]
+        B --> C[WhisperVoiceRecorder]
+        C --> D[Audio Buffer]
+        D --> E[Web Worker]
+        E --> F[WASM Module]
+        F --> G[Transcription]
+        G --> H[UI Update]
+    end
 
-```
-┌─────────────────┐     ┌───────────────┐     ┌─────────────────┐
-│                 │     │               │     │                 │
-│   Microphone    │──▶  │ Audio Capture │──▶  │ Audio Streaming │
-│                 │     │               │     │                 │
-└─────────────────┘     └───────────────┘     └─────────────────┘
-                                                       │
-                                                       ▼
-┌─────────────────┐     ┌───────────────┐     ┌─────────────────┐
-│                 │     │               │     │                 │
-│  Notes Storage  │◀──  │ Transcription │◀──  │  Whisper WASM   │
-│   (IndexedDB)   │     │    Engine     │     │    Processing   │
-│                 │     │               │     │                 │
-└─────────────────┘     └───────────────┘     └─────────────────┘
-       │                        ▲
-       │                        │
-       ▼                        │
-┌─────────────────┐     ┌───────────────┐     ┌─────────────────┐
-│                 │     │               │     │                 │
-│   Export to     │◀──  │ wscribe-editor│  ◀──│   UI Display    │
-│ Various Formats │     │  Integration  │     │                 │
-│                 │     │               │     │                 │
-└─────────────────┘     └───────────────┘     └─────────────────┘
-```
+    subgraph Context Management
+        I[WhisperContext] --> J[Worker Pool]
+        J --> E
+        I --> K[State Management]
+        K --> C
+    end
 
-## User Interaction Sequence Flow
-
-```
-┌─────────┐     ┌────────────┐     ┌───────────┐     ┌────────────┐     ┌──────────┐
-│         │     │            │     │           │     │            │     │          │
-│  User   │     │  Recorder  │     │  Whisper  │     │  Editor    │     │ Storage  │
-│         │     │            │     │           │     │            │     │          │
-└────┬────┘     └─────┬──────┘     └─────┬─────┘     └──────┬─────┘     └─────┬────┘
-     │                │                  │                  │                 │
-     │  Start Record  │                  │                  │                 │
-     │───────────────▶│                  │                  │                 │
-     │                │                  │                  │                 │
-     │                │Request Mic Access│                  │                 │
-     │◀ ─ ─ ─ ─ ─ ─ ─ ┤                  │                  │                 │
-     │                │                  │                  │                 │
-     │ Allow Access   │                  │                  │                 │
-     │───────────────▶│                  │                  │                 │
-     │                │                  │                  │                 │
-     │                │ Begin Recording  │                  │                 │
-     │                │───────────────────────────────────▶│                 │
-     │                │                  │                  │                 │
-     │                │ Stream Audio Data│                  │                 │
-     │                │─────────────────▶│                  │                 │
-     │                │                  │                  │                 │
-     │                │                  │ Real-time Text   │                 │
-     │                │                  │─────────────────▶│                 │
-     │                │                  │                  │                 │
-     │                │                  │                  │ Display Text    │
-     │                │                  │                  │────────────────▶│
-     │                │                  │                  │                 │
-     │ Stop Recording │                  │                  │                 │
-     │───────────────▶│                  │                  │                 │
-     │                │                  │                  │                 │
-     │                │ Stop Audio Stream│                  │                 │
-     │                │─────────────────▶│                  │                 │
-     │                │                  │                  │                 │
-     │                │                  │ Final Transcript │                 │
-     │                │                  │─────────────────▶│                 │
-     │                │                  │                  │                 │
-     │                │                  │                  │ Unlock Editor   │
-     │                │                  │                  │────────────────▶│
-     │                │                  │                  │                 │
-     │                │                  │                  │ Save Note      │
-     │                │                  │                  │───────────────▶│
-     │                │                  │                  │                │
-     │                │                  │                  │                │
+    subgraph Build System
+        L[whisper.cpp] --> M[Emscripten]
+        M --> N[WASM Module]
+        N --> F
+    end
 ```
 
-## Component Relationship Diagram
-
-```
-┌───────────────────────────────────────────────────────────────────┐
-│                           Next.js App                             │
-└───────────┬───────────────────┬───────────────────┬───────────────┘
-            │                   │                   │
-            ▼                   ▼                   ▼
-┌───────────────────┐ ┌───────────────────┐ ┌───────────────────┐
-│                   │ │                   │ │                   │
-│    Components     │ │ WhisperContext    │ │   Database        │
-│                   │ │                   │ │   Service         │
-└─────┬───────┬─────┘ └─────────┬─────────┘ └─────────┬─────────┘
-      │       │               │                     │
-      │       │               │                     │
-      ▼       ▼               ▼                     ▼
-┌─────────┐ ┌─────────┐ ┌─────────────┐ ┌─────────────────────┐
-│         │ │         │ │             │ │                     │
-│ Recorder│ │ Editor  │ │ Whisper WASM│ │ IndexedDB (Dexie.js)│
-│         │ │         │ │             │ │                     │
-└─────────┘ └─────────┘ └─────────────┘ └─────────────────────┘
-      │          │             │                   │
-      │          │             │                   │
-      └──────────┴─────────────┴───────────────────┘
-                          │
-                          ▼
-                 ┌─────────────────┐
-                 │                 │
-                 │  Export Service │
-                 │                 │
-                 └─────────────────┘
+## Initialization Flow
+```mermaid
+sequenceDiagram
+    participant App
+    participant Context
+    participant Worker
+    participant WASM
+    
+    App->>Context: Initialize WhisperContext
+    Context->>Worker: Create Worker Pool
+    Worker->>WASM: Load WASM Module
+    WASM-->>Worker: Module Ready
+    Worker-->>Context: Workers Initialized
+    Context-->>App: Ready for Transcription
 ```
 
-## Entity Relationship Diagram (IndexedDB/Dexie Schema)
+## Recording Flow
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI
+    participant Recorder
+    participant Worker
+    participant WASM
 
-```
-┌────────────────────────────┐
-│           Note             │
-├────────────────────────────┤
-│ id: number (PK, auto)      │
-│ title: string              │
-│ transcript: string         │
-│ audioBlob: Blob (optional) │
-│ created: Date              │
-│ updated: Date              │
-│ tags: string[]             │
-└────────────────────────────┘
-          │
-          │ 1:N
-          ▼
-┌────────────────────────────┐
-│      TranscriptWord        │
-├────────────────────────────┤
-│ id: number (PK, auto)      │
-│ noteId: number (FK)        │
-│ text: string               │
-│ startTime: number          │
-│ endTime: number            │
-│ confidence: number         │
-└────────────────────────────┘
+    User->>UI: Start Recording
+    UI->>Recorder: Initialize MediaRecorder
+    Recorder->>Recorder: Collect Audio Data
+    User->>UI: Stop Recording
+    UI->>Worker: Send Audio Data
+    Worker->>WASM: Process Audio
+    WASM-->>Worker: Return Transcription
+    Worker-->>UI: Update Display
 ```
 
-## State Transitions Diagram
-
+## Memory Management
+```mermaid
+flowchart LR
+    A[Audio Input] --> B[Buffer Pool]
+    B --> C{Size Check}
+    C -->|Under Limit| D[Process]
+    C -->|Over Limit| E[Clear Old]
+    E --> D
+    D --> F[Release Memory]
 ```
-┌───────────────┐      Start     ┌───────────────┐
-│               │ ───────────────▶               │
-│    Idle       │                │  Requesting   │
-│               │ ◀─────────────── Mic Permission │
-└───────────────┘      Deny      └───────────────┘
-                                        │
-                                        │ Allow
-                                        ▼
-┌───────────────┐      Stop     ┌───────────────┐
-│               │ ◀─────────────┤               │
-│  Editing      │               │   Recording   │
-│               │               │               │
-└───────────────┘               └───────────────┘
-       │                               │
-       │                               │
-       │                               │
-       │           ┌───────────────┐   │
-       └──────────▶│               │◀──┘
-                  │ Transcribing   │
-                  │               │
-                  └───────────────┘
-                         │
-                         │ Complete
-                         ▼
-                  ┌───────────────┐
-                  │               │
-                  │  Saving Note  │
-                  │               │
-                  └───────────────┘
+
+## Error Handling
+```mermaid
+flowchart TD
+    A[Operation] --> B{Error Check}
+    B -->|No Error| C[Continue]
+    B -->|Error| D[Error Handler]
+    D --> E{Error Type}
+    E -->|WASM| F[Reload Module]
+    E -->|Worker| G[Restart Worker]
+    E -->|Memory| H[Clear Memory]
+    F --> I[Resume]
+    G --> I
+    H --> I
+```
+
+## Development Workflow
+```mermaid
+gitGraph
+    commit id: "initial"
+    commit id: "setup"
+    branch feature/wasm
+    commit id: "wasm-setup"
+    commit id: "worker-impl"
+    checkout main
+    merge feature/wasm
+    commit id: "release"
+```
+
+---
+Copyright (C) 2025 Robin L. M. Cheung, MBA
