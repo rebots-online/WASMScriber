@@ -1,42 +1,96 @@
+/**
+ * @file next.config.mjs
+ * @description Next.js configuration with WebAssembly and Web Worker support
+ * @copyright (C) 2025 Robin L. M. Cheung, MBA
+ */
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  webpack: (config, { isServer }) => {
+  // Enable WebAssembly
+  webpack: (config, { isServer, dev }) => {
     // WebAssembly config
     config.experiments = {
       ...config.experiments,
       asyncWebAssembly: true,
+      layers: true
     };
-
-    // Allow WebAssembly files to be processed
-    config.module.rules.push({
-      test: /\.wasm$/,
-      type: "webassembly/async",
-    });
 
     // Web Worker config
     config.module.rules.push({
-      test: /\.worker\.(js|ts|tsx)$/,
+      test: /\.worker\.(js|ts)$/,
       use: {
-        loader: "worker-loader",
+        loader: 'worker-loader',
         options: {
-          filename: "static/[hash].worker.js",
-          publicPath: "/_next/",
-        },
-      },
+          filename: 'static/[hash].worker.js',
+          publicPath: '/_next/',
+          inline: 'no-fallback'
+        }
+      }
     });
 
-    // Update fallback for WebAssembly
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      path: false,
-    };
+    // WASM file handling
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: 'webassembly/async'
+    });
+
+    // Fix for worker-loader
+    if (!isServer) {
+      config.output.globalObject = 'self';
+    }
+
+    // Production optimizations
+    if (!dev && !isServer) {
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          ...config.optimization.splitChunks,
+          chunks: 'all',
+          minSize: 20000,
+          maxSize: 100000
+        }
+      };
+    }
 
     return config;
   },
-  // Required to make worker-loader work with Next.js
-  experimental: {
-    esmExternals: "loose",
+
+  // Enable strict mode
+  reactStrictMode: true,
+
+  // Configure headers for WASM and Workers
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin'
+          },
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'require-corp'
+          }
+        ]
+      }
+    ];
+  },
+
+  // Configure output export
+  output: 'standalone',
+
+  // Page extensions
+  pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
+
+  // Disable image optimization for WASM files
+  images: {
+    unoptimized: true
+  },
+
+  // Environment configuration
+  env: {
+    NEXT_PUBLIC_WASM_PATH: '/whisper.wasm'
   }
 };
 
