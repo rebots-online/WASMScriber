@@ -25,13 +25,13 @@ interface DedicatedWorkerGlobalScope {
 }
 
 /**
- * Worker factory type for TypeScript Worker construction
+ * Worker modules in webpack/vite context
  */
 declare module "*.worker.ts" {
-  class WebpackWorker extends Worker {
-    constructor();
-  }
-  export default WebpackWorker;
+  const WorkerConstructor: {
+    new (): Worker;
+  };
+  export default WorkerConstructor;
 }
 
 /**

@@ -1,243 +1,213 @@
-'use client';
+/**
+ * @file WhisperContext.tsx
+ * @description React context for managing Whisper WASM workers
+ * @copyright (C) 2025 Robin L. M. Cheung, MBA
+ */
 
-import React, {
+import {
   createContext,
   useContext,
-  useState,
-  ReactNode,
   useRef,
-  useCallback,
   useEffect,
+  useCallback,
+  ReactNode,
+  useState
 } from 'react';
-import * as Comlink from 'comlink';
-import type { WhisperWorkerInterface } from '../types/whisper';
+import WhisperWorker from '@/lib/workers/whisper.worker';
+import type {
+  WhisperConfig,
+  WorkerMessage,
+  WorkerResponse,
+  TranscriptionResult
+} from '@/lib/types/whisper';
 
 interface WhisperContextType {
-  connectToWhisper: () => Promise<void>;
-  disconnectFromWhisper: () => void;
-  isRecording: boolean;
-  realtimeTranscript: string;
+  isInitialized: boolean;
+  isProcessing: boolean;
   error: string | null;
-  isModelLoading: boolean;
+  transcribe: (audio: Float32Array) => Promise<TranscriptionResult>;
+  initialize: (config: WhisperConfig) => Promise<void>;
+  cleanup: () => void;
 }
 
-const WhisperContext = createContext<WhisperContextType | undefined>(undefined);
+const WhisperContext = createContext<WhisperContextType | null>(null);
 
-interface WhisperContextProviderProps {
-  children: ReactNode;
+const MAX_WORKERS = navigator.hardwareConcurrency || 4;
+const WORKER_TIMEOUT = 30000; // 30 seconds
+
+interface WorkerInstance {
+  worker: Worker;
+  busy: boolean;
+  lastUsed: number;
 }
 
-declare global {
-  interface Navigator {
-    gpu?: {
-      requestAdapter(): Promise<{} | null>;
-    };
-  }
-}
-
-/**
- * Determines if the browser supports WebGPU and returns whether GPU acceleration is available
- */
-async function hasWebGPUSupport(): Promise<boolean> {
-  if (!navigator.gpu) return false;
-  
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    return adapter !== null;
-  } catch {
-    return false;
-  }
-}
-
-// Audio worklet for real-time audio processing
-const audioWorklet = `
-class AudioProcessor extends AudioWorkletProcessor {
-  constructor() {
-    super();
-    this.buffers = [];
-    this.totalSamples = 0;
-  }
-
-  process(inputs) {
-    const input = inputs[0];
-    if (!input || !input.length) return true;
-
-    // Convert input to mono if necessary
-    const monoInput = input.length === 1 ? input[0] : 
-      new Float32Array(input[0].length).map((_, i) => 
-        input.reduce((sum, channel) => sum + channel[i], 0) / input.length
-      );
-
-    this.buffers.push(monoInput.slice());
-    this.totalSamples += monoInput.length;
-
-    // Send accumulated audio data when we have enough samples
-    if (this.totalSamples >= 16000) { // 1 second of audio at 16kHz
-      const completeBuffer = new Float32Array(this.totalSamples);
-      let offset = 0;
-      for (const buffer of this.buffers) {
-        completeBuffer.set(buffer, offset);
-        offset += buffer.length;
-      }
-      
-      this.port.postMessage(completeBuffer);
-      
-      // Reset buffers
-      this.buffers = [];
-      this.totalSamples = 0;
-    }
-
-    return true;
-  }
-}
-
-registerProcessor('audio-processor', AudioProcessor);
-`;
-
-export const WhisperContextProvider: React.FC<WhisperContextProviderProps> = ({ 
-  children 
-}: WhisperContextProviderProps) => {
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [realtimeTranscript, setRealtimeTranscript] = useState<string>('');
+export function WhisperProvider({ children }: { children: ReactNode }) {
+  const workersRef = useRef<WorkerInstance[]>([]);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isModelLoading, setIsModelLoading] = useState<boolean>(false);
-  
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
-  const workerRef = useRef<Comlink.Remote<WhisperWorkerInterface> | null>(null);
+  const configRef = useRef<WhisperConfig | null>(null);
 
-  // Initialize WebAssembly worker and audio worklet
-  const initialize = useCallback(async () => {
-    if (!audioContextRef.current) {
-      // Create audio context
-      audioContextRef.current = new AudioContext({
-        sampleRate: 16000, // Required sample rate for Whisper
-        latencyHint: 'interactive'
-      });
+  // Initialize a new worker
+  const createWorker = useCallback(async (config: WhisperConfig) => {
+    const worker = new WhisperWorker();
+    
+    return new Promise<WorkerInstance>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        worker.terminate();
+        reject(new Error('Worker initialization timeout'));
+      }, WORKER_TIMEOUT);
 
-      // Load audio worklet
-      const workletBlob = new Blob([audioWorklet], { type: 'application/javascript' });
-      const workletUrl = URL.createObjectURL(workletBlob);
-      await audioContextRef.current.audioWorklet.addModule(workletUrl);
-      URL.revokeObjectURL(workletUrl);
-
-      // Initialize WebAssembly worker
-      const worker = new Worker(
-        new URL('../workers/whisper.worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-      
-      workerRef.current = Comlink.wrap<WhisperWorkerInterface>(worker);
-      await workerRef.current.initialize();
-
-      // Set up transcription callback
-      workerRef.current.setTranscriptionCallback(
-        Comlink.proxy((text: string) => {
-          setRealtimeTranscript(prev => prev + ' ' + text);
-        })
-      );
-    }
-  }, []);
-
-  const connectToWhisper = useCallback(async () => {
-    try {
-      setError(null);
-      setRealtimeTranscript('');
-      setIsModelLoading(true);
-
-      await initialize();
-
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 16000
-        } 
-      });
-
-      if (!audioContextRef.current) {
-        throw new Error('Audio context not initialized');
-      }
-
-      // Create audio graph
-      sourceNodeRef.current = audioContextRef.current.createMediaStreamSource(stream);
-      workletNodeRef.current = new AudioWorkletNode(
-        audioContextRef.current,
-        'audio-processor'
-      );
-
-      // Process audio data from worklet
-      workletNodeRef.current.port.onmessage = async (event) => {
-        const audioData = event.data;
-        if (workerRef.current) {
-          await workerRef.current.processAudioChunk(audioData);
+      worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+        if (event.data.type === 'MODEL_LOADED') {
+          clearTimeout(timeoutId);
+          resolve({
+            worker,
+            busy: false,
+            lastUsed: Date.now()
+          });
+        } else if (event.data.type === 'ERROR') {
+          clearTimeout(timeoutId);
+          reject(new Error(event.data.payload));
         }
       };
 
-      // Connect audio nodes
-      sourceNodeRef.current.connect(workletNodeRef.current);
-      workletNodeRef.current.connect(audioContextRef.current.destination);
+      worker.postMessage({
+        type: 'LOAD_MODEL',
+        payload: config
+      } as WorkerMessage);
+    });
+  }, []);
 
-      setIsRecording(true);
-      setIsModelLoading(false);
+  // Get an available worker or create a new one
+  const getWorker = useCallback(async (): Promise<WorkerInstance> => {
+    if (!configRef.current) {
+      throw new Error('Whisper context not initialized');
+    }
+
+    // Find available worker
+    const availableWorker = workersRef.current.find(w => !w.busy);
+    if (availableWorker) {
+      availableWorker.busy = true;
+      availableWorker.lastUsed = Date.now();
+      return availableWorker;
+    }
+
+    // Create new worker if under limit
+    if (workersRef.current.length < MAX_WORKERS) {
+      const newWorker = await createWorker(configRef.current);
+      workersRef.current.push(newWorker);
+      newWorker.busy = true;
+      return newWorker;
+    }
+
+    // Wait for a worker to become available
+    return new Promise((resolve) => {
+      const checkInterval = setInterval(() => {
+        const worker = workersRef.current.find(w => !w.busy);
+        if (worker) {
+          clearInterval(checkInterval);
+          worker.busy = true;
+          worker.lastUsed = Date.now();
+          resolve(worker);
+        }
+      }, 100);
+    });
+  }, [createWorker]);
+
+  // Initialize the context
+  const initialize = useCallback(async (config: WhisperConfig) => {
+    try {
+      configRef.current = config;
+      const initialWorker = await createWorker(config);
+      workersRef.current = [initialWorker];
+      setIsInitialized(true);
+      setError(null);
     } catch (err) {
-      console.error('Error starting recording:', err);
-      setError(err instanceof Error ? err.message : 'Failed to start recording');
-      setIsRecording(false);
-      setIsModelLoading(false);
+      setError(err instanceof Error ? err.message : 'Failed to initialize Whisper');
+      throw err;
     }
-  }, [initialize]);
+  }, [createWorker]);
 
-  const disconnectFromWhisper = useCallback(() => {
-    if (workletNodeRef.current) {
-      workletNodeRef.current.disconnect();
-      workletNodeRef.current = null;
+  // Transcribe audio
+  const transcribe = useCallback(async (audio: Float32Array): Promise<TranscriptionResult> => {
+    try {
+      setIsProcessing(true);
+      setError(null);
+      
+      const workerInstance = await getWorker();
+      
+      const result = await new Promise<TranscriptionResult>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('Transcription timeout'));
+        }, WORKER_TIMEOUT);
+
+        workerInstance.worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+          if (event.data.type === 'TRANSCRIPTION_RESULT') {
+            clearTimeout(timeoutId);
+            resolve(event.data.payload);
+          } else if (event.data.type === 'ERROR') {
+            clearTimeout(timeoutId);
+            reject(new Error(event.data.payload));
+          }
+        };
+
+        workerInstance.worker.postMessage({
+          type: 'PROCESS_AUDIO',
+          payload: audio
+        } as WorkerMessage);
+      });
+
+      workerInstance.busy = false;
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Transcription failed');
+      throw err;
+    } finally {
+      setIsProcessing(false);
     }
+  }, [getWorker]);
 
-    if (sourceNodeRef.current) {
-      sourceNodeRef.current.disconnect();
-      sourceNodeRef.current.mediaStream.getTracks().forEach(track => track.stop());
-      sourceNodeRef.current = null;
-    }
-
-    setIsRecording(false);
+  // Cleanup workers
+  const cleanup = useCallback(() => {
+    workersRef.current.forEach(({ worker }) => {
+      worker.postMessage({ type: 'ABORT' } as WorkerMessage);
+      worker.terminate();
+    });
+    workersRef.current = [];
+    setIsInitialized(false);
+    setIsProcessing(false);
+    setError(null);
+    configRef.current = null;
   }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      disconnectFromWhisper();
-      if (workerRef.current) {
-        workerRef.current.cleanup();
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
+      cleanup();
     };
-  }, [disconnectFromWhisper]);
+  }, [cleanup]);
 
-  const contextValue: WhisperContextType = {
-    connectToWhisper,
-    disconnectFromWhisper,
-    isRecording,
-    realtimeTranscript,
+  const value = {
+    isInitialized,
+    isProcessing,
     error,
-    isModelLoading,
+    transcribe,
+    initialize,
+    cleanup
   };
 
   return (
-    <WhisperContext.Provider value={contextValue}>
+    <WhisperContext.Provider value={value}>
       {children}
     </WhisperContext.Provider>
   );
-};
+}
 
-export function useWhisper(): WhisperContextType {
+export function useWhisper() {
   const context = useContext(WhisperContext);
-  if (context === undefined) {
-    throw new Error('useWhisper must be used within a WhisperContextProvider');
+  if (!context) {
+    throw new Error('useWhisper must be used within a WhisperProvider');
   }
   return context;
 }
